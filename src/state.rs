@@ -8,7 +8,11 @@ use crate::settlement::SettlementInfo;
 #[derive(Debug, Serialize)]
 pub struct PlayerData {
     pub counter: u64,
-    game_map: Gamemap
+    // pub width: u64,
+    // pub height: u64,
+    // pub level: u64,
+    // pub seed: u64,
+    // game_map: Gamemap
 
 }
 
@@ -16,17 +20,17 @@ impl Default for PlayerData {
     fn default() -> Self {
         Self {
             counter: 0,
-            game_map:Gamemap {
-                // pub game_map: Vec<Vec<u64>>,
-                // pub trap_positions:Vec<(u64, u64)>,
-                // pub chest_positions:Vec<(u64, u64)>,
-                // pub treasure_position: (u64, u64)
-                game_map:vec![],
-                trap_positions:vec![],
-                chest_positions:vec![],
-                treasure_position: (0,0),
-                rng: SimpleRNG { state: 0 },
-            }
+            // width: 0,
+            // height: 0,
+            // level: 0,
+            // seed: 0,
+            // game_map:Gamemap {
+            //     game_map:vec![],
+            //     trap_positions:vec![],
+            //     chest_positions:vec![],
+            //     treasure_position: (0,0),
+            //     rng: SimpleRNG { state: 0 },
+            // }
         }
     }
 }
@@ -34,21 +38,30 @@ impl Default for PlayerData {
 impl StorageData for PlayerData {
     fn from_data(u64data: &mut IterMut<u64>) -> Self {
         let counter = *u64data.next().unwrap();
-        let width = *u64data.next().unwrap();
-        let height = *u64data.next().unwrap();
-        let level = *u64data.next().unwrap();
-        let seed = *u64data.next().unwrap();
-        let game_map = Gamemap::new((width as usize, height as usize), level, seed);
+        // let width = *u64data.next().unwrap();
+        // let height = *u64data.next().unwrap();
+        // let level = *u64data.next().unwrap();
+        // let seed = *u64data.next().unwrap();
+        // let game_map = Gamemap::new((width as usize, height as usize), level, seed);
         PlayerData {
             counter,
-            game_map:game_map
+            // width,
+            // height,
+            // level,
+            // seed,
+            // game_map:game_map
 
         }
     }
     fn to_data(&self, data: &mut Vec<u64>) {
         data.push(self.counter);
+        // data.push(self.width);
+        // data.push(self.height);
+        // data.push(self.level);
+        // data.push(self.seed);
 
     }
+
 }
 
 pub type HelloWorldPlayer = Player<PlayerData>;
@@ -189,7 +202,8 @@ impl Transaction {
             Some(mut player) => {
                 unsafe {
                     // State::initialize();
-                    GameState.game_map = Gamemap::new((18, 35), 2, 10086);
+                    let game_map = Gamemap::new((18, 35), 2, 10086);
+                    State::new(game_map);
                     player.store();
                 }
                 0
@@ -197,6 +211,7 @@ impl Transaction {
             None => ERROR_PLAYER_NOT_EXIST, // 如果玩家不存在，返回错误
         }
     }
+
 
 
     pub fn process(&self, pkey: &[u64; 4], _rand: &[u64; 4]) -> u32 {
