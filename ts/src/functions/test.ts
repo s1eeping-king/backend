@@ -9,6 +9,8 @@ async function main() {
   console.log(state);
   state = await player.register();
   console.log(state);
+  state = await player.incounter();
+  console.log(state);
 }
 
 main();

@@ -2,237 +2,131 @@ use crate::StorageData;
 use crate::MERKLE_MAP;
 use core::slice::IterMut;
 use zkwasm_rest_abi::Player;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use crate::settlement::SettlementInfo;
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Position {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Debug, Serialize)]
 #[derive(Debug, Serialize)]
 pub struct PlayerData {
-    pub counter: u64,
-    // pub width: u64,
-    // pub height: u64,
-    // pub level: u64,
-    // pub seed: u64,
-    // game_map: Gamemap
-
+    pub health: u64,        // 玩家生命值
+    pub stamina: u64,       // 玩家体力值
+    pub coins: u64,         // 玩家当前金币数量
+    pub position: Position, // 玩家的当前位置
+    pub eventMessage: u64,  // 本次移动的事件描述，是可选的
 }
 
 impl Default for PlayerData {
     fn default() -> Self {
         Self {
-            counter: 0,
-            // width: 0,
-            // height: 0,
-            // level: 0,
-            // seed: 0,
-            // game_map:Gamemap {
-            //     game_map:vec![],
-            //     trap_positions:vec![],
-            //     chest_positions:vec![],
-            //     treasure_position: (0,0),
-            //     rng: SimpleRNG { state: 0 },
-            // }
+            health: 100,
+            stamina: 100,
+            coins: 0,
+            position: Position { x: 0, y: 0 },
+            eventMessage: 0,
         }
+    }
+}
+
+impl PlayerData {
+    // 扣除体力值
+    pub fn reduce_stamina(&mut self, amount: u64) {
+        if self.stamina >= amount {
+            self.stamina -= amount;
+        } else {
+            self.stamina = 0;
+        }
+    }
+
+    // 扣除体力值和生命值
+    pub fn hit_trap(&mut self, damage: u64) {
+        self.reduce_stamina(damage);
+        if self.health >= damage {
+            self.health -= damage;
+        } else {
+            self.health = 0;
+        }
+    }
+
+    // 使用金币购买体力值或生命值
+    pub fn buy_health_or_stamina(&mut self, health_amount: u64, stamina_amount: u64) -> bool {
+        let cost = (health_amount + stamina_amount) * 10; // 每单位生命值或体力值的价格为10金币
+        if self.coins >= cost {
+            self.coins -= cost;
+            self.health += health_amount;
+            self.stamina += stamina_amount;
+            true
+        } else {
+            false
+        }
+    }
+
+    // 计算积分
+    pub fn calculate_score(&self) -> u64 {
+        self.coins * 10
     }
 }
 
 impl StorageData for PlayerData {
     fn from_data(u64data: &mut IterMut<u64>) -> Self {
-        let counter = *u64data.next().unwrap();
-        // let width = *u64data.next().unwrap();
-        // let height = *u64data.next().unwrap();
-        // let level = *u64data.next().unwrap();
-        // let seed = *u64data.next().unwrap();
-        // let game_map = Gamemap::new((width as usize, height as usize), level, seed);
+        let health = *u64data.next().unwrap();
+        let stamina = *u64data.next().unwrap();
+        let coins = *u64data.next().unwrap();
+        let x = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
+        let y = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
+        let eventMessage = *u64data.next().unwrap();
         PlayerData {
-            counter,
-            // width,
-            // height,
-            // level,
-            // seed,
-            // game_map:game_map
-
+            health,
+            stamina,
+            coins,
+            position: Position { x, y },
+            eventMessage,
         }
     }
     fn to_data(&self, data: &mut Vec<u64>) {
-        data.push(self.counter);
-        // data.push(self.width);
-        // data.push(self.height);
-        // data.push(self.level);
-        // data.push(self.seed);
+        data.push(self.health);
+        data.push(self.stamina);
+        data.push(self.coins);
+        data.push(self.position.x as u64);
+        data.push(self.position.y as u64);
+        data.push(self.eventMessage);
+    }
+}
 
+#[derive(Debug)]
+pub struct SimpleRNG {
+    state: u64,
+}
+
+impl SimpleRNG {
+    // 初始化 RNG 并设置种子
+    pub fn new(seed: u64) -> Self {
+        SimpleRNG { state: seed }
     }
 
+    // 生成一个伪随机 u32 值
+    pub fn next_u32(&mut self) -> u32 {
+        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        (self.state >> 32) as u32
+    }
+
+    // Fisher-Yates shuffle 用于随机化给定向量
+    pub fn shuffle<T>(&mut self, data: &mut [T]) {
+        let len = data.len();
+        for i in (1..len).rev() {
+            let j = (self.next_u32() as usize) % (i + 1);
+            data.swap(i, j);
+        }
+    }
 }
+
 
 pub type HelloWorldPlayer = Player<PlayerData>;
-
-#[derive (Serialize)]
-pub struct State {
-    counter: u64,
-    game_map: Gamemap
-}
-
-impl State {
-    pub fn get_state(pkey: Vec<u64>) -> String {
-        let player = HelloWorldPlayer::get_from_pid(&HelloWorldPlayer::pkey_to_pid(&pkey.try_into().unwrap()));
-        serde_json::to_string(&player).unwrap()
-
-    }
-
-    pub fn rand_seed() -> u64 {
-        0
-    }
-
-    pub fn store(&self) {
-    }
-
-    pub fn initialize() {
-        // zkwasm_rust_sdk::dbg!("initialize\n");
-        // unsafe {
-        //     GameState.game_map = Gamemap::new((18, 35), 2, 10086);
-        // }
-        // zkwasm_rust_sdk::dbg!("initialized\n");
-
-    }
-
-    pub fn new(gamemap: Gamemap) -> Self {
-        State {
-            counter: 0,
-            game_map:gamemap
-        }
-    }
-
-    pub fn snapshot() -> String {
-        let state = unsafe { &GameState };
-        serde_json::to_string(&state).unwrap()
-    }
-
-    pub fn preempt() -> bool {
-        let state = unsafe {&GameState };
-        return state.counter >= 20;
-    }
-
-    pub fn flush_settlement() -> Vec<u8> {
-        let data = SettlementInfo::flush_settlement();
-        unsafe { GameState.store()};
-        data
-    }
-
-    pub fn tick(&mut self) {
-        self.counter += 1;
-    }
-}
-
-pub static mut GameState: State  = State {
-    counter: 0,
-    game_map:Gamemap {
-        // pub game_map: Vec<Vec<u64>>,
-        // pub trap_positions:Vec<(u64, u64)>,
-        // pub chest_positions:Vec<(u64, u64)>,
-        // pub treasure_position: (u64, u64)
-        game_map:vec![],
-        trap_positions:vec![],
-        chest_positions:vec![],
-        treasure_position: (0,0),
-        rng: SimpleRNG { state: 0 },
-    }
-};
-
-pub struct Transaction {
-    pub command: u64,
-    pub data: Vec<u64>,
-}
-
-const AUTOTICK: u64 = 0;
-const INSTALL_PLAYER: u64 = 1;
-const INC_COUNTER: u64 = 2;
-const SET_GAME_MAP: u64 = 3;
-
-const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
-const ERROR_PLAYER_NOT_EXIST:u32 = 2;
-
-impl Transaction {
-    pub fn decode_error(e: u32) -> &'static str {
-        match e {
-            ERROR_PLAYER_NOT_EXIST => "PlayerNotExist",
-            ERROR_PLAYER_ALREADY_EXIST => "PlayerAlreadyExist",
-            _ => "Unknown"
-        }
-    }
-    pub fn decode(params: [u64; 4]) -> Self {
-        let command = params[0] & 0xff;
-        let data = vec![params[1], params[2], params[3]]; // pkey[0], pkey[1], amount
-        Transaction {
-            command,
-            data,
-        }
-    }
-    pub fn install_player(&self, pkey: &[u64; 4]) -> u32 {
-        zkwasm_rust_sdk::dbg!("install \n");
-        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
-        let player = HelloWorldPlayer::get_from_pid(&pid);
-        match player {
-            Some(_) => ERROR_PLAYER_ALREADY_EXIST,
-            None => {
-                let player = HelloWorldPlayer::new_from_pid(pid);
-                player.store();
-                0
-            }
-        }
-    }
-
-    pub fn inc_counter(&self, pkey: &[u64; 4]) -> u32 {
-        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
-        match HelloWorldPlayer::get_from_pid(&pid) {
-            Some(mut player) => {
-                // 更新玩家的计数器
-                player.data.counter += 1;
-
-                // 保存更新后的玩家数据
-                player.store();
-                0 // 成功的返回值
-            },
-            None => ERROR_PLAYER_NOT_EXIST, // 如果玩家不存在，返回错误
-        }
-    }
-    pub fn set_game_map(&self,pkey:&[u64; 4])->u32 {
-        zkwasm_rust_sdk::dbg!("set game map \n");
-        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
-        match HelloWorldPlayer::get_from_pid(&pid) {
-            Some(mut player) => {
-                unsafe {
-                    // State::initialize();
-                    let game_map = Gamemap::new((18, 35), 2, 10086);
-                    State::new(game_map);
-                    player.store();
-                }
-                0
-            },
-            None => ERROR_PLAYER_NOT_EXIST, // 如果玩家不存在，返回错误
-        }
-    }
-
-
-
-    pub fn process(&self, pkey: &[u64; 4], _rand: &[u64; 4]) -> u32 {
-        match self.command {
-            AUTOTICK => {
-                unsafe { GameState.tick() };
-                return 0;
-            },
-            INSTALL_PLAYER => self.install_player(pkey),
-            INC_COUNTER => self.inc_counter(pkey),
-            SET_GAME_MAP =>self.set_game_map(pkey),
-            _ => {
-                return 0
-            }
-        }
-    }
-}
-
-
-
-use serde::{ Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Gamemap {
@@ -317,27 +211,113 @@ impl Gamemap {
     }
 }
 
-// 伪随机数生成器结构体，支持序列化和反序列化
-#[derive(Serialize, Deserialize, Debug)]
-struct SimpleRNG {
-    state: u64,
+pub struct State {
+    game_map: Gamemap,
+    leaderboard: Leaderboard, // 添加 leaderboard 字段
 }
 
-impl SimpleRNG {
-    fn new(seed: u64) -> Self {
-        SimpleRNG { state: seed }
-    }
-
-    fn next_u32(&mut self) -> u32 {
-        self.state = self.state.wrapping_mul(1664525).wrapping_add(1013904223);
-        (self.state >> 16) as u32
-    }
-
-    fn shuffle<T>(&mut self, items: &mut [T]) {
-        let len = items.len();
-        for i in 0..len {
-            let j = self.next_u32() as usize % len;
-            items.swap(i, j);
+impl State {
+    pub fn new(gamemap: Gamemap) -> Self {
+        State {
+            game_map: gamemap,
+            leaderboard: Leaderboard { players: vec![] }, // 初始化 leaderboard
         }
+    }
+
+    // 其他方法...
+}
+
+// 使用 State::new 方法来创建一个 State 实例
+pub static mut GAME_STATE: State = State::new(Gamemap {
+    game_map: vec![],
+    trap_positions: vec![],
+    chest_positions: vec![],
+    treasure_position: (0, 0),
+    rng: SimpleRNG { state: 0 },
+});
+
+pub struct Transaction {
+    pub command: u64,
+    pub data: Vec<u64>,
+}
+
+const AUTOTICK: u64 = 0;
+const INSTALL_PLAYER: u64 = 1;
+const SET_GAME_MAP: u64 = 3;
+const COINS_UP: u64 = 4;
+const COINS_DOWN: u64 = 5;
+const MOVEMENT: u64 = 6;
+const BUY_HEALTH_OR_STAMINA: u64 = 7; // 新增购买体力或生命值命令
+
+impl Transaction {
+    // 错误代码
+    const ERROR_PLAYER_ALREADY_EXIST: u32 = 1;
+    const ERROR_PLAYER_NOT_EXIST: u32 = 2;
+    const ERROR_INSUFFICIENT_COINS: u32 = 3;
+
+    // 安装玩家
+    pub fn install_player(&self, pkey: &[u64; 4]) -> u32 {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        let player = HelloWorldPlayer::get_from_pid(&pid);
+        if player.is_none() {
+            let player = HelloWorldPlayer::new_from_pid(pid);
+            player.store();
+            0
+        } else {
+            0 // 不限制多个玩家注册
+        }
+    }
+
+    // 增加玩家的金币
+    pub fn coins_up(&self, pkey: &[u64; 4], amount: u64) -> u32 {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        match HelloWorldPlayer::get_from_pid(&pid) {
+            Some(mut player) => {
+                player.data.coins += amount;
+                player.store();
+                0
+            }
+            None => Transaction::ERROR_PLAYER_NOT_EXIST,
+        }
+    }
+
+    // 购买生命值或体力值
+    pub fn buy_health_or_stamina(&self, pkey: &[u64; 4], health_amount: u64, stamina_amount: u64) -> u32 {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        match HelloWorldPlayer::get_from_pid(&pid) {
+            Some(mut player) => {
+                if player.data.buy_health_or_stamina(health_amount, stamina_amount) {
+                    player.store();
+                    0
+                } else {
+                    Transaction::ERROR_INSUFFICIENT_COINS
+                }
+            }
+            None => Transaction::ERROR_PLAYER_NOT_EXIST,
+        }
+    }
+
+    // 获取玩家的分数
+    pub fn get_score(&self, pkey: &[u64; 4]) -> Option<u64> {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        HelloWorldPlayer::get_from_pid(&pid).map(|player| player.data.calculate_score())
+    }
+}
+
+
+pub struct Leaderboard {
+    players: Vec<HelloWorldPlayer>,
+}
+
+impl Leaderboard {
+    pub fn update_leaderboard(&mut self) {
+        self.players.sort_by_key(|player| -(player.data.calculate_score() as i64));
+    }
+
+    pub fn get_top_n(&self, n: usize) -> Vec<(u64, u64)> {
+        self.players.iter().take(n).map(|player| {
+            let pid = HelloWorldPlayer::pkey_to_pid(&player.pkey()); // 使用 pkey_to_pid 获取玩家 ID
+            (pid, player.data.calculate_score())
+        }).collect()
     }
 }
