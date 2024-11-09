@@ -4,6 +4,7 @@ function bytesToHex(bytes) {
 }
 const CMD_INSTALL_PLAYER = 1n;
 const CMD_INC_COUNTER = 2n;
+const SET_GAME_MAP = 3n;
 function createCommand(nonce, command, feature) {
     return (nonce << 16n) + (feature << 8n) + command;
 }
@@ -63,7 +64,18 @@ export class Player {
         let nonce = await this.getNonce();
         try {
             let result = await this.rpc.sendTransaction(new BigUint64Array([createCommand(nonce, CMD_INC_COUNTER, 0n), 0n, 0n, 0n]), this.processingKey);
-            // console.log("why");
+            return result;
+        }
+        catch (e) {
+            if (e instanceof Error) {
+                console.log(e.message);
+            }
+        }
+    }
+    async getMap() {
+        let nonce = await this.getNonce();
+        try {
+            let result = await this.rpc.sendTransaction(new BigUint64Array([createCommand(nonce, SET_GAME_MAP, 0n), 0n, 0n, 0n]), this.processingKey);
             return result;
         }
         catch (e) {
