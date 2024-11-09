@@ -5,17 +5,13 @@ use zkwasm_rest_abi::Player;
 use serde::Serialize;
 use crate::settlement::SettlementInfo;
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-}
 
 #[derive(Debug, Serialize)]
 pub struct PlayerData {
     pub health: u64,        // 更新后的体力值
     pub coins: u64,         // 玩家当前金币数量
-    pub position: Position, // 玩家的新位置
+    pub position_x: i32,
+    pub position_y: i32,
     pub eventMessage: u64, // 本次移动的事件描述，是可选的
 }
 
@@ -24,7 +20,8 @@ impl Default for PlayerData {
         Self {
             health: 100,
             coins: 0,
-            position: Position { x: 0, y: 0 },
+            position_x: 0,
+            position_y: 0,
             eventMessage: 0,
         }
     }
@@ -32,23 +29,24 @@ impl Default for PlayerData {
 
 impl StorageData for PlayerData {
     fn from_data(u64data: &mut IterMut<u64>) -> Self {
-        let coins = *u64data.next().unwrap();
         let health = *u64data.next().unwrap();
-        let x = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
-        let y = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
+        let coins = *u64data.next().unwrap();
+        let position_x = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
+        let position_y = *u64data.next().unwrap() as i32; // 假设 x 和 y 是 i32 类型
         let eventMessage = *u64data.next().unwrap();
         PlayerData {
             health,
             coins,
-            position : Position {x, y},
+            position_x,
+            position_y,
             eventMessage,
         }
     }
     fn to_data(&self, data: &mut Vec<u64>) {
-        data.push(self.coins);
         data.push(self.health);
-        data.push(self.position.x as u64);
-        data.push(self.position.y as u64);
+        data.push(self.coins);
+        data.push(self.position_x as i32);
+        data.push(self.position_y as i32);
         data.push(self.eventMessage);
     }
 }
@@ -117,12 +115,17 @@ const INSTALL_PLAYER: u64 = 1;
 const INC_COUNTER: u64 = 2;
 const COINS_UP: u64 = 3;
 const COINS_DOWN: u64 = 4;
-const MOVEMENT: u64 = 5;
 
 
 const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
 const ERROR_PLAYER_NOT_EXIST:u32 = 2;
 
+enum movement_direction {
+    Up,
+    DOWN,
+    RIGHT,
+    LEFT,
+}
 
 impl Transaction {
     pub fn decode_error(e: u32) -> &'static str {
@@ -144,7 +147,6 @@ impl Transaction {
         zkwasm_rust_sdk::dbg!("install \n");
         let pid = HelloWorldPlayer::pkey_to_pid(pkey);
         let player = HelloWorldPlayer::get_from_pid(&pid);
-        zkwasm_rust_sdk::dbg!("reach install_player branch\n");
         match player {
             Some(_) => ERROR_PLAYER_ALREADY_EXIST,
             None => {
@@ -190,8 +192,8 @@ impl Transaction {
         match HelloWorldPlayer::get_from_pid(&pid) {
             Some(mut player) => {
                 // 更新玩家的金钱计数器
-                player.data.coins -= 1;//不能先减一
-                zkwasm_rust_sdk::dbg!("reach coins_down branch\n");
+                player.data.coins -= 1;
+
                 // 保存更新后的玩家数据
                 player.store();
                 0 // 成功的返回值
@@ -202,29 +204,22 @@ impl Transaction {
 
     pub fn movement(&self, pkey: &[u64; 4]) -> u32 {
         let pid = HelloWorldPlayer::pkey_to_pid(pkey);
-        zkwasm_rust_sdk::dbg!("reach movement branch\n");
         match HelloWorldPlayer::get_from_pid(&pid) {
             Some(mut player) => {
-                match self.data[0] {
-                    0 =>{//up
-                        player.data.position.y -= 1;
-                        zkwasm_rust_sdk::dbg!("reach 0 branch\n");
+                match self.data[1] {
+                    0 =>{
+                        player.data.position_y += 1;
                     },
-                    1 =>{//down
-                        player.data.position.y += 1;
-                        zkwasm_rust_sdk::dbg!("reach 1 branch\n");
+                    1 =>{
+                        player.data.position_y -= 1;
                     }
-                    2 =>{//left
-                        player.data.position.x -= 1;
-                        zkwasm_rust_sdk::dbg!("reach 2 branch\n");
+                    2 =>{
+                        player.data.position_x -= 1;
                     },
-                    3 =>{//right
-                        player.data.position.x += 1;
-                        zkwasm_rust_sdk::dbg!("reach 3 branch\n");
+                    3 =>{
+                        player.data.position_x += 1;
                     }
-                    _ => {
-                        zkwasm_rust_sdk::dbg!("reach unknown branch\n");
-                    }
+                    _ => {}
                 }// 保存更新后的玩家数据
                 player.store();
                 0 // 成功的返回值
@@ -243,7 +238,6 @@ impl Transaction {
             INC_COUNTER => self.inc_counter(pkey),
             COINS_UP => self.coins_up(pkey),
             COINS_DOWN => self.coins_down(pkey),
-            MOVEMENT => self.movement(pkey),
             _ => {
                 return 0
             }
