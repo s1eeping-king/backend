@@ -1,5 +1,7 @@
 {
+  "name": "my-package",
   "type": "module",
+  "main": "src/api.js",
   "dependencies": {
     "@types/bn.js": "^5.1.5",
     "@types/cors": "^2.8.17",
