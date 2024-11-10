@@ -12,7 +12,6 @@ pub struct Position {
 }
 
 #[derive(Debug, Serialize)]
-#[derive(Debug, Serialize)]
 pub struct PlayerData {
     pub health: u64,        // 玩家生命值
     pub stamina: u64,       // 玩家体力值
@@ -98,7 +97,7 @@ impl StorageData for PlayerData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SimpleRNG {
     state: u64,
 }
@@ -210,13 +209,17 @@ impl Gamemap {
         }
     }
 }
-
+#[derive (Serialize)]
 pub struct State {
     game_map: Gamemap,
     leaderboard: Leaderboard, // 添加 leaderboard 字段
 }
 
 impl State {
+    pub fn get_state(pkey: Vec<u64>) -> String {
+        let player = HelloWorldPlayer::get_from_pid(&HelloWorldPlayer::pkey_to_pid(&pkey.try_into().unwrap()));
+        serde_json::to_string(&player).unwrap()
+    }
     pub fn new(gamemap: Gamemap) -> Self {
         State {
             game_map: gamemap,
@@ -224,7 +227,29 @@ impl State {
         }
     }
 
-    // 其他方法...
+
+    pub fn rand_seed() -> u64 {
+        0
+    }
+    pub fn snapshot() -> String {
+        let state = unsafe { &GAME_STATE };
+        unsafe { serde_json::to_string(&GAME_STATE).unwrap() }
+    }
+    pub fn store(&self) {
+    }
+
+    pub fn initialize() {
+    }
+    pub fn preempt() -> bool {
+        // 在这里实现中断条件，当前返回 false
+        false
+    }
+
+    pub fn flush_settlement() -> Vec<u8> {
+        let data = SettlementInfo::flush_settlement();
+        unsafe {GAME_STATE.store()};
+        data
+    }
 }
 
 // 使用 State::new 方法来创建一个 State 实例
@@ -249,11 +274,33 @@ const COINS_DOWN: u64 = 5;
 const MOVEMENT: u64 = 6;
 const BUY_HEALTH_OR_STAMINA: u64 = 7; // 新增购买体力或生命值命令
 
+const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
+const ERROR_PLAYER_NOT_EXIST:u32 = 2;
+
+const ERROR_INSUFFICIENT_COINS: u32 = 3;
+
 impl Transaction {
-    // 错误代码
-    const ERROR_PLAYER_ALREADY_EXIST: u32 = 1;
-    const ERROR_PLAYER_NOT_EXIST: u32 = 2;
+    const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
+    const ERROR_PLAYER_NOT_EXIST:u32 = 2;
+
     const ERROR_INSUFFICIENT_COINS: u32 = 3;
+    // 错误代码
+    pub fn decode_error(e: u32) -> &'static str {
+        match e {
+            ERROR_PLAYER_NOT_EXIST => "PlayerNotExist",
+            ERROR_PLAYER_ALREADY_EXIST => "PlayerAlreadyExist",
+            _ => "Unknown"
+        }
+    }
+    pub fn decode(params: [u64; 4]) -> Self {
+        let command = params[0] & 0xff;
+        let amount = params[1]; // 假设 params[1] 是 amount 参数
+        let pkey = [params[2], params[3]]; // pkey[0], pkey[1]
+        Transaction {
+            command,
+            data: vec![amount, pkey[0], pkey[1]], // 存储 amount 和 pkey
+        }
+    }
 
     // 安装玩家
     pub fn install_player(&self, pkey: &[u64; 4]) -> u32 {
@@ -281,6 +328,7 @@ impl Transaction {
         }
     }
 
+
     // 购买生命值或体力值
     pub fn buy_health_or_stamina(&self, pkey: &[u64; 4], health_amount: u64, stamina_amount: u64) -> u32 {
         let pid = HelloWorldPlayer::pkey_to_pid(pkey);
@@ -302,9 +350,79 @@ impl Transaction {
         let pid = HelloWorldPlayer::pkey_to_pid(pkey);
         HelloWorldPlayer::get_from_pid(&pid).map(|player| player.data.calculate_score())
     }
+
+    pub fn coins_down(&self, pkey: &[u64; 4]) -> u32 {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        match HelloWorldPlayer::get_from_pid(&pid) {
+            Some(mut player) => {
+                // 更新玩家的金钱计数器
+                player.data.coins -= 1;//不能先减一
+                zkwasm_rust_sdk::dbg!("reach coins_down branch\n");
+                // 保存更新后的玩家数据
+                player.store();
+                0 // 成功的返回值
+            },
+            None => ERROR_PLAYER_NOT_EXIST, // 如果玩家不存在，返回错误
+        }
+    }
+
+    pub fn movement(&self, pkey: &[u64; 4]) -> u32 {
+        let pid = HelloWorldPlayer::pkey_to_pid(pkey);
+        zkwasm_rust_sdk::dbg!("reach movement branch\n");
+        match HelloWorldPlayer::get_from_pid(&pid) {
+            Some(mut player) => {
+                match self.data[0] {
+                    0 =>{//up
+                        player.data.position.y -= 1;
+                        zkwasm_rust_sdk::dbg!("reach 0 branch\n");
+                    },
+                    1 =>{//down
+                        player.data.position.y += 1;
+                        zkwasm_rust_sdk::dbg!("reach 1 branch\n");
+                    }
+                    2 =>{//left
+                        player.data.position.x -= 1;
+                        zkwasm_rust_sdk::dbg!("reach 2 branch\n");
+                    },
+                    3 =>{//right
+                        player.data.position.x += 1;
+                        zkwasm_rust_sdk::dbg!("reach 3 branch\n");
+                    }
+                    _ => {
+                        zkwasm_rust_sdk::dbg!("reach unknown branch\n");
+                    }
+                }// 保存更新后的玩家数据
+                player.store();
+                0 // 成功的返回值
+            },
+            None => ERROR_PLAYER_NOT_EXIST, // 如果玩家不存在，返回错误
+        }
+    }
+    pub fn process(&self, pkey: &[u64; 4], _rand: &[u64; 4]) -> u32 {
+        match self.command {
+            // AUTOTICK => {
+            //     unsafe { STATE.tick() };
+            //     return 0;
+            // },
+            INSTALL_PLAYER => self.install_player(pkey),
+            COINS_UP => {
+                if let Some(amount) = self.data.get(0) {
+                    self.coins_up(pkey, *amount)
+                } else {
+                    // 处理错误情况，例如记录日志或返回错误代码
+                    0 // 或者返回一个错误代码
+                }
+            },
+            COINS_DOWN => self.coins_down(pkey),
+            MOVEMENT => self.movement(pkey),
+            _ => {
+                return 0
+            }
+        }
+    }
 }
 
-
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Leaderboard {
     players: Vec<HelloWorldPlayer>,
 }
@@ -314,10 +432,16 @@ impl Leaderboard {
         self.players.sort_by_key(|player| -(player.data.calculate_score() as i64));
     }
 
-    pub fn get_top_n(&self, n: usize) -> Vec<(u64, u64)> {
-        self.players.iter().take(n).map(|player| {
-            let pid = HelloWorldPlayer::pkey_to_pid(&player.pkey()); // 使用 pkey_to_pid 获取玩家 ID
-            (pid, player.data.calculate_score())
-        }).collect()
+    pub fn get_top_n(&self, n: usize, pkey: &[u64; 4]) -> Vec<(u64, u64)> {
+        self.players
+            .iter()
+            .take(n)
+            .map(|player| {
+                // 假设每个 player 都有一个 id 方法来获取他们的 ID 和一个 score 方法来获取分数
+                let pid = player.id(); // 使用 player 的 id 方法获取玩家 ID
+                let score = player.score(); // 使用 player 的 score 方法获取玩家的分数
+                (pid, score) // 返回一个元组 (pid, score)
+            })
+            .collect()
     }
 }

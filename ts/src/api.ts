@@ -133,3 +133,7 @@ export class Player {
     }
   }
 }
+let account = "12345";
+let player = new Player(account, "http://localhost:3000");
+export default player;
+

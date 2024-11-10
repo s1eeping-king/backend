@@ -1,8 +1,0 @@
-wasm-pack build --release --out-name application --out-dir pkg
-wasm-opt -Oz -o ./ts/node_modules/zkwasm-ts-server/src/application/application_bg.wasm pkg/application_bg.wasm
-cp pkg/application_bg.wasm ./ts/node_modules/zkwasm-ts-server/src/application/application_bg.wasm
-cp pkg/application.d.ts ./ts/node_modules/zkwasm-ts-server/src/application/application.d.ts
-#cp pkg/application_bg.js ./ts/node_modules/zkwasm-ts-server/src/application/application_bg.js
-cp pkg/application_bg.wasm.d.ts ./ts/node_modules/zkwasm-ts-server/src/application/application_bg.wasm.d.ts
-cd ./ts/node_modules/zkwasm-ts-server && npx tsc && cd -
-/home/fang/code/helloworld-rollup
