@@ -1,4 +1,7 @@
 {
+  "name": "mypackage1",
+  "version": "1.0.0",
+  "main": "src/api.ts",
   "type": "module",
   "dependencies": {
     "@types/bn.js": "^5.1.5",
